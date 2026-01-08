@@ -264,12 +264,28 @@ if __name__ == "__main__":
             if not enabled:
                 raise RuntimeError("No enabled mcpServers found in config")
             logger.info(f"Starting servers: {', '.join(enabled)}")
-            tasks = [asyncio.create_task(connect_with_retry(endpoint_url, t)) for t in enabled]
+            
+            tasks = []
+            for t in enabled:
+                # 自动拼接 server_id，如果 URL 中尚未指定
+                if "server_id=" not in endpoint_url:
+                    sep = "&" if "?" in endpoint_url else "?"
+                    server_url = f"{endpoint_url}{sep}server_id={t}"
+                else:
+                    server_url = endpoint_url
+                tasks.append(asyncio.create_task(connect_with_retry(server_url, t)))
+            
             # Run all forever; if any crashes it will auto-retry inside
             await asyncio.gather(*tasks)
         else:
             if os.path.exists(target_arg):
-                await connect_with_retry(endpoint_url, target_arg)
+                # 对于单个脚本，如果 URL 没指定 server_id，尝试从文件名生成
+                server_url = endpoint_url
+                if "server_id=" not in endpoint_url:
+                    sep = "&" if "?" in endpoint_url else "?"
+                    file_name = os.path.basename(target_arg).split('.')[0]
+                    server_url = f"{endpoint_url}{sep}server_id={file_name}"
+                await connect_with_retry(server_url, target_arg)
             else:
                 logger.error("Argument must be a local Python script path. To run configured servers, run without arguments.")
                 sys.exit(1)
